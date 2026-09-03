@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+.venv_test/
+venv/
+.streamlit/secrets.toml
+*.md.bak
+test_output.md
