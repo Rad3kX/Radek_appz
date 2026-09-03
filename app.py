@@ -90,11 +90,13 @@ def group_into_paragraphs(snippets, max_gap: float, max_chars: int):
     return paragraphs
 
 
-def build_markdown(video_id: str, language_label: str, paragraphs) -> str:
+def build_markdown(video_id: str, language_label: str, paragraphs, show_timestamps: bool) -> str:
+    video_url = f"https://www.youtube.com/watch?v={video_id}"
     lines = [
         f"# Přepis videa `{video_id}`",
         "",
-        f"- **Zdroj:** https://www.youtube.com/watch?v={video_id}",
+        f"📺 [{video_url}]({video_url})",
+        "",
         f"- **Jazyk titulků:** {language_label}",
         f"- **Vygenerováno:** {datetime.now().strftime('%Y-%m-%d %H:%M')}",
         "",
@@ -102,7 +104,8 @@ def build_markdown(video_id: str, language_label: str, paragraphs) -> str:
         "",
     ]
     for start, text in paragraphs:
-        lines.append(f"**[{format_timestamp(start)}]** {text}")
+        prefix = f"**[{format_timestamp(start)}]** " if show_timestamps else ""
+        lines.append(f"{prefix}{text}")
         lines.append("")
     return "\n".join(lines)
 
@@ -126,15 +129,18 @@ with col1:
 with col2:
     include_generated = st.checkbox("Povolit automaticky generované titulky", value=True)
 
+show_timestamps = st.checkbox("Zobrazit časové značky u odstavců", value=True)
+
 with st.expander("Pokročilé nastavení seskupování odstavců"):
     max_gap = st.slider("Max. pauza mezi větami pro nový odstavec (s)", 0.5, 10.0, 2.0, 0.5)
     max_chars = st.slider("Max. délka odstavce (znaky)", 100, 2000, 500, 50)
 
 fetch_clicked = st.button("Stáhnout přepis", type="primary")
 
-if "result_md" not in st.session_state:
-    st.session_state.result_md = None
+if "paragraphs" not in st.session_state:
+    st.session_state.paragraphs = None
     st.session_state.video_id = None
+    st.session_state.language_label = None
 
 if fetch_clicked:
     video_id = extract_video_id(url) if url else None
@@ -173,9 +179,9 @@ if fetch_clicked:
                     if transcript.is_generated:
                         language_label += " – automaticky generováno"
 
-                    md = build_markdown(video_id, language_label, paragraphs)
-                    st.session_state.result_md = md
+                    st.session_state.paragraphs = paragraphs
                     st.session_state.video_id = video_id
+                    st.session_state.language_label = language_label
                     st.success(f"Přepis načten – jazyk: {language_label}, počet odstavců: {len(paragraphs)}")
 
             except TranscriptsDisabled:
@@ -187,13 +193,20 @@ if fetch_clicked:
             except Exception as exc:  # noqa: BLE001 - zobrazíme neočekávanou chybu uživateli
                 st.error(f"Nastala neočekávaná chyba: {exc}")
 
-if st.session_state.result_md:
+if st.session_state.paragraphs:
+    result_md = build_markdown(
+        st.session_state.video_id,
+        st.session_state.language_label,
+        st.session_state.paragraphs,
+        show_timestamps,
+    )
+
     st.subheader("Náhled")
-    st.markdown(st.session_state.result_md)
+    st.markdown(result_md)
 
     st.download_button(
         label="⬇️ Stáhnout jako .md",
-        data=st.session_state.result_md.encode("utf-8"),
+        data=result_md.encode("utf-8"),
         file_name=f"transcript_{st.session_state.video_id}.md",
         mime="text/markdown",
     )
